@@ -1,0 +1,8 @@
+*.orig
+*.swo
+*.swp
+Mnesia*
+deps/*
+ebin/*
+erl_crash.dump
+

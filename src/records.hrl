@@ -1,0 +1,2 @@
+-record(blip, {id, doc}).
+-record(feed, {id, last_update}).
