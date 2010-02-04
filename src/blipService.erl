@@ -5,9 +5,14 @@
 fetch(Url) ->
   case feeds:read({feed, {<<"id">>,Url}}) of
     {struct, Feed} -> 
+%      case Feed.last_update of
+%         
+%      end,
       {struct, feed:update(Feed)};
     {error, Reason} ->
-      {struct, feed:create({struct, {<<"id">>,Url})}
+      {struct, feed:create({struct, {<<"id">>,Url}})},
+      {ok, {_ | Body}} = http_fetch(Url),
+      parse(Body)
   end.
 
 http_fetch(Url) ->
