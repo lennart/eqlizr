@@ -4,7 +4,7 @@
 -include("records.hrl").
 
 read_all(_S) -> 
-	Feeds = blipdb:read_all(feeds),
+	Feeds = blipdb:all(feeds),
 	lists:map(fun(F) -> {struct, [{<<"id">>, F#feed.id}, {<<"last_update">>, F#feed.last_update}]} end, Feeds).
 
 create(S) ->
@@ -15,22 +15,22 @@ create(S) ->
 	Feed.
 
 read(S) ->
-  {struct, Feed} = S,
+  {feed, Feed} = S,
 	Id = proplists:get_value(<<"id">>, Feed),
 
 	case blipdb:read({feed, Id}) of
 		[{feed, Id, LastUpdate}] ->
-      {struct, [{<<"id">>,Id}},{<<"last_update">>, LastUpdate}]};
+      {struct, [{<<"id">>,Id},{<<"last_update">>, LastUpdate}]};
 		[] ->
 			{error, [{<<"message">>, <<"Feed not found">>}]}
 	end.
 
 update(S) ->
   {feed, Feed} = S,
-  {atomic, ok} = blipdb:write({feed, Feed.id, calendar:now_to_universal_time(erlang:now())}),
+  {atomic, ok} = blipdb:write({feed, Feed#feed.id, calendar:now_to_universal_time(erlang:now())}),
 	{struct, [{<<"message">>, ok}]}.
 
 delete(S) ->
   {feed, Feed} = S,
-	{atomic, ok} = blipdb:delete({feed, Feed.id}),
+	{atomic, ok} = blipdb:delete({feed, Feed#feed.id}),
 	{struct, [{<<"message">>, ok}]}.
