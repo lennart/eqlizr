@@ -3,14 +3,16 @@
 -include("records.hrl").
 
 fetch(Url) ->
-  case feeds:read(#feed{id=Url}) of
+  case feeds:read(Url) of
     {struct, Feed} -> 
-      {struct, feed:update(Feed)};
+      {struct, feeds:update(Feed)};
     {error, Reason} ->
-      {struct, feed:create({struct, {<<"id">>,Url}})},
+      {struct, feeds:create({struct, {<<"id">>,Url}})},
       {ok, {_,_,Body}} = http_fetch(Url),
       parse(Body)
   end.
+
+% Internal Methods
 
 http_fetch(Url) ->
   case http:request(get, {Url, [{"User-Agent", "eqlizr"}]}, [], []) of
@@ -30,12 +32,14 @@ parse(Content) ->
 store(Blips) ->
   lists:map(fun (Blip) -> find_or_create(Blip) end, Blips).
 
+
 find_or_create(Blip) ->
-  case blips:read(Blip) of
-    {struct, NewBlip} ->
-      {struct, NewBlip};
+  Id = lists:keyfind(<<"id">>,1,Blip),
+  case blips:read(Id) of
+    {blip, NewBlip} ->
+      {blip, NewBlip};
     {error, Reason} ->
-      {struct, blips:create(Blip)};
+      {blip, blips:create(Blip)};
     _ ->
       io:write("Failed\n")
   end.
