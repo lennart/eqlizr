@@ -20,15 +20,21 @@ ensure_started(App) ->
 start() ->
     eqlizr_deps:ensure(),
     ensure_started(crypto),
-    ensure_started(mnesia),
     ensure_started(inets),
+    ensure_started(ecouch),
+    ensure_started(erlsom),
+ %   ensure_started(mnesia),
     application:start(eqlizr).
+   % register(feed_synchronizer, spawn(blipService,update_all_feeds,[60])).
 
 %% @spec stop() -> ok
 %% @doc Stop the eqlizr server.
 stop() ->
     Res = application:stop(eqlizr),
     application:stop(crypto),
-    application:stop(mnesia),
+    application:stop(ecouch),
+    feed_synchronizer ! finished,
+    application:stop(erlsom),
+%    application:stop(mnesia),
     application:stop(inets),
     Res.

@@ -8,34 +8,48 @@ read_all() ->
 
 create(S) ->
   {struct, Blip} = S,
-	{json, BlipResponse} = blipdb:create(Blip),
-	BlipResponse.
+  BlipId = json:get("id", Blip),
+  case read(BlipId) of
+    {blip, ExistingBlip} ->
+      {blip, ExistingBlip};
+    {error, _} ->
+      case blipdb:create({json, Blip}) of
+        {doc, NewBlip} ->
+          {blip, NewBlip};
+        {error, Reason} ->
+          {error, Reason}
+      end
+  end.
 
 find_by_blip_id(BlipId) ->
-	case blipdb:find("Blip", "by_blip_id", BlipId) of
-    {struct, Result} ->
+  case blipdb:find("Blip", "by_blip_id", BlipId) of
+    {doc, Result} ->
       {blip, Result};
-		[] ->
-			{error, [{<<"message">>, <<"blip not found">>}]}
-	end.
+    [] ->
+      {error, [{<<"message">>, <<"blip not found">>}]}
+  end.
 
 
 read(Id) ->
-	case blipdb:find(blip, "by_blip_id", Id) of
+  case blipdb:find(blip, "by_blip_id", [{key, Id}]) of
     {doc, Doc} ->
-      {feed, Doc};
+      {blip, Doc};
     {error, Reason} ->
-			{error, [{<<"message">>, <<"Feed not found">>}]}
-	end.
+      {error, [{<<"message">>, <<"Feed not found">>}]}
+  end.
 
-update(S) ->
-  %{blip, 
-	Id = struct:get_value(<<"id">>, S),
-	Doc = struct:get_value(<<"doc">>, S),
-	{atomic, ok} = blipdb:update({blip, Id, Doc}),
-	{struct, [{<<"message">>, ok}]}.
+update({blip, Blip}) -> 
+  %{blip, Doc} = Blip,
+  case blipdb:update({json, Blip}) of
+    {doc, Doc} ->
+      {blip, Doc};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+%  {atomic, ok} = blipdb:update(Doc),
+%  {struct, [{<<"message">>, ok}]}.
 
-delete(S) ->
-	Id = struct:get_value(<<"id">>, S),
-	{atomic, ok} = blipdb:delete({blip, Id}),
-	{struct, [{<<"message">>, ok}]}.
+delete({blip, Blip}) ->
+%  {blip, Blip} = S,
+  {atomic, ok} = blipdb:delete({json, Blip}),
+  {struct, [{<<"message">>, ok}]}.

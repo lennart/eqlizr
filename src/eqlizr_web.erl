@@ -20,17 +20,34 @@ start(Options) ->
 stop() ->
     mochiweb_http:stop(?MODULE).
 
+respond(Req, Data) ->
+  Req:ok({"application/json", [{"Server","eqlizr"}], [json:encode(Data)]}).
+
+respond_error(Req, Message) ->
+  Req:ok({"application/json", [{"Server", "eqlizr"}], [json:encode({obj, [{"error", Message}]})]}).
+  
+
 loop(Req, DocRoot) ->
     "/" ++ Path = Req:get(path),
     case Req:get(method) of
         Method when Method =:= 'GET'; Method =:= 'HEAD' ->
             case Path of
+                "blip/timeline" ++ Id ->
+                  case blipService:fetch_radar(Id) of
+                    [{feed, Feed}|Blips] ->
+                      RawBlips = [{obj, X} || {_, X} <- Blips],
+                      respond(Req, [{obj, Feed}|RawBlips]);
+                    _ ->
+                      respond_error(Req, <<"not_found">>)
+                    end;
                 "blip/" ++ Id ->
-                  Url = io_lib:format("http://api.blip.fm/blip/getUserProfile.json?username=~s",[Id]),
-                  Raw = blipService:fetch(Url),
-                  NewRaw = mochijson2:encode(Raw),
-                  Req:ok({"application/json", [{"Server","Mochiweb-Blipper"}], [NewRaw]});
-%                  Response:write_chunk(NewRaw);
+                  case blipService:fetch_station(Id) of
+                    [{feed, Feed}|Blips] ->
+                      RawBlips = [{obj, X} || {_, X} <- Blips],
+                      respond(Req, [{obj, Feed}|RawBlips]);
+                    _ ->
+                      respond_error(Req, <<"not_found">>)
+                    end;
                 _ ->
                     Req:serve_file(Path, DocRoot)
             end;

@@ -1,46 +1,66 @@
 -module(blipService).
--export([fetch/1]).
+-compile(export_all).
+%-export([fetch_station/1,fetch_radar/1,update_all_feeds/1]).
 -include("records.hrl").
 
-fetch(Url) ->
-  case feeds:read(Url) of
-    {struct, Feed} -> 
-      {struct, feeds:update(Feed)};
+fetch_station(User) ->
+  fetch(station_url([{"username",User}]), api).
+fetch_radar(User) ->
+  fetch(radar_url(User), web).
+
+full_update() ->
+  feed_synchronizer ! update.
+
+update_all_feeds(Interval) when is_integer(Interval) ->
+  case feeds:read_all() of
     {error, Reason} ->
-      {struct, feeds:create({struct, {<<"id">>,Url}})},
-      {ok, {_,_,Body}} = http_fetch(Url),
-      parse(Body)
+      io:format("Error: ~p~n", [Reason]);
+    Feeds ->
+      lists:foreach(fun({feed,F}) -> feeds:fetch_blips({feed,F},true) end, Feeds)
+  end,
+  receive
+    update ->
+      update_all_feeds(Interval);
+    finished ->
+      io:format("Ending Work")
+  after Interval*1000 ->
+      update_all_feeds(Interval)
   end.
 
 % Internal Methods
 
-http_fetch(Url) ->
-  case http:request(get, {Url, [{"User-Agent", "eqlizr"}]}, [], []) of
-    {ok, {_, Headers, Body}} ->
-      parse(Body);
-    {error, Reason} ->
-      {error, Reason}
+fetch(Url, Source) ->
+  Feed = case feeds:read(Url) of
+    {feed, _Feed} -> 
+      io:format("Reading Feed: ~p~n", [_Feed]),
+      {feed, _Feed};
+    {error, _} ->
+      feeds:create(Url, Source)
+  end,
+  case feeds:fetch_blips(Feed) of
+    [{feed, UpdatedFeed}|Blips] ->
+      [{feed, UpdatedFeed}|Blips];
+    Random ->
+      io:format("Result: ~p~n", [Random])
   end.
 
-parse(Content) ->
-  {struct, Json} = mochijson2:decode(Content),
-  {struct, Result} = proplists:get_value(<<"result">>, Json),
-  {struct, Collection} = proplists:get_value(<<"collection">>, Result),
-  Blips = proplists:get_value(<<"Blip">>, Collection),
-  store(Blips).
+api_root_url(Path, Query) ->
+  build_url({"http","api.blip.fm","/blip"}, Path, Query).
 
-store(Blips) ->
-  lists:map(fun (Blip) -> find_or_create(Blip) end, Blips).
+build_url({Scheme, Host, Rootpath}, Path, Query) ->
+  mochiweb_util:urlunsplit({Scheme, Host, mochiweb_util:join(lists:append([Rootpath],Path),"/"),encode_query(Query),[]}).
 
+web_root_url(Path, Query) ->
+  build_url({"http","blip.fm",""}, Path, Query).
 
-find_or_create(Blip) ->
-  Id = lists:keyfind(<<"id">>,1,Blip),
-  case blips:read(Id) of
-    {blip, NewBlip} ->
-      {blip, NewBlip};
-    {error, Reason} ->
-      {blip, blips:create(Blip)};
-    _ ->
-      io:write("Failed\n")
-  end.
+station_url(Query) ->
+  api_root_url(["getUserProfile.json"], Query). 
 
+radar_url(User) ->
+  web_root_url(["feed",User],[]).
+
+replies_url(User) ->
+  web_root_url(["feed",User,"replies"],[]).
+
+encode_query(Query) ->
+  mochiweb_util:urlencode(Query).
