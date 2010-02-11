@@ -49,7 +49,13 @@ loop(Req, DocRoot) ->
                       respond_error(Req, <<"not_found">>)
                     end;
                 _ ->
-                    Req:serve_file(Path, DocRoot)
+                  case blips:read_all() of
+                    [_Head|_Tail] = Blips ->
+                      RawBlips = [{struct, X} || {_, X} <- Blips],
+                      respond(Req, [RawBlips]);
+                    _ ->
+                      respond_error(Req, <<"not_found">>)
+                    end
             end;
         'POST' ->
             case Path of
@@ -64,18 +70,6 @@ loop(Req, DocRoot) ->
 
 get_option(Option, Options) ->
     {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.
-
-feed(Response, Path, N) ->
-  receive
-    %{router_msg, Msg} ->
-    %    Html = io_lib:format("Recvd msg #~w: ‘~s’<br/>", [N, Msg]),
-    %    Response:write_chunk(Html);
-  after 10000 ->
-      Msg = io_lib:format("Chunk ~w for id ~s\n", [N, Path]),
-      Response:write_chunk(Msg)
-  end,
-  feed(Response, Path, N+1).
-
 
 %%
 %% Tests

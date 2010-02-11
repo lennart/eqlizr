@@ -1,2 +1,0 @@
--record(blip,{doc=[],meta=[{dirty, true}]}).
--record(feed,{doc=[{<<"last_updated">>,feeds:current_time_for_json()}],meta=[{dirty,true}]}).

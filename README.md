@@ -1,0 +1,1 @@
+Known Bugs: When concurrently accessing stale feeds there's a race condition, since each request tries to create the feed and update all entries. It ends in a near recursive writing of "feeds" into blips

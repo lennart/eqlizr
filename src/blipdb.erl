@@ -3,7 +3,6 @@
 
 -include_lib("stdlib/include/qlc.hrl").
 
--include("records.hrl").
 -define(DATABASE, "blipfm").
 
 reset() ->
@@ -31,10 +30,8 @@ all(Design) ->
 find(Design, View, Q) ->
   case fetch_all(Design, View, Q) of 
     [{struct, _Result} = Result] -> 
-      %io:format("Single Result: ~p~n",[Result]),
       extract_document(Result);
     [Result|_] ->
-      %io:format("Multiple Results: ~p~n",[Result]),
       extract_document(Result);
     [] ->
       {error, {<<"message">>, "Document not found"}}
@@ -66,7 +63,6 @@ fetch_all(Design, View, Options) ->
     {ok, {struct, Response}} ->
       case extract_rows(Response) of
         {Rows, _, _} -> 
-          %io:format("Rows: ~p~n",[Rows]),
           Rows;
         none ->
           {error, {<<"message">>, "None Found"}}
@@ -75,11 +71,12 @@ fetch_all(Design, View, Options) ->
       {error, {<<"message">>, Reason}}
   end.
 
+% CRUD - Methods
+
 create({bulk, List}) ->
   case ecouch:doc_bulk_create(database(), List) of
     {ok, {struct, DocList}} ->
       io:format("Response for Bulkcreation ~p~n", [DocList]);
-%      [{doc, update_id_and_revision(Doc)} || {struct, Doc} <- DocList];
     {error, Reason} ->
       {error, {<<"message">>, io_lib:format("Error: ~p~n",[Reason])}}
   end;
@@ -87,15 +84,11 @@ create({bulk, List}) ->
 create({json, Doc}) ->
   case ecouch:doc_create(database(),{struct, Doc}) of
     {ok, {struct, Rest}} ->
-      %Rev = json:get("rev",Rest),
-
       UpdatedDoc = update_id_and_revision(Rest, Doc),
       {doc, UpdatedDoc};
     {error, Reason} ->
       {error, {<<"message">>, io_lib:format("Error: ~p~n",[Reason])}}
   end.
-
-
 
 read(Oid) ->
   ecouch:doc_get(database(), Oid).
@@ -120,12 +113,15 @@ delete({json, Doc}) ->
     false ->
       {error, {<<"message">>,"Missing Document _id"}};
     UUID ->
-      ecouch:doc_delete(database(), UUID)
+      case ecouch:doc_delete(database(), UUID) of
+        {ok, _} ->
+          {ok, true};
+        {error, Reason} ->
+          {error, Reason}
+      end
   end.
 
 % Internal Methods
-
-
 
 extract_document({struct, Result}) ->
   {struct, Doc} = json:get("value",Result),
@@ -135,8 +131,6 @@ extract_rows(Response) ->
   [{<<"total_rows">>, Count}, {<<"offset">>, Offset}, {<<"rows">>,Rows}] = Response,
   {Rows, Count, Offset}.
 
-
-
 record_to_design_name(Name) ->
   case Name of
     feed ->
@@ -144,9 +138,6 @@ record_to_design_name(Name) ->
     blip ->
       "Blip"
   end.
-
-host() ->
-  {"localhost", 5984}.
 
 database() ->
   "blipfm".
@@ -161,8 +152,6 @@ create_view(Design, Maps) ->
       }
     } || {Key, Code} <- Maps],
   ecouch:view_create(?DATABASE,Design, {struct, PreparedMaps}).
-
-
 
 update_id_and_revision(Response, Doc) ->
   json:set("_id",json:get("id",Response),json:set("_rev",json:get("rev",Response),Doc)).
