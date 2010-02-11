@@ -1,6 +1,6 @@
 -module(feeds).
 -compile(export_all).
-%-export([read_all/0,create/2,read/1,update/1,delete/1,fetch_blips/1,fetch_blips/2,parse_xml_feed/1]).
+%-export([read_all/0,create/2,read/1,update/1,delete/1,fetch_blips/1,fetch_blips/2,parse_ids_from_rss_feed/1]).
 
 -include("records.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
@@ -29,7 +29,7 @@ create(Url, Source) ->
         web ->
           <<"web">>
       end,
-      {doc, Feed} = blipdb:create({json, [{"source",SourceValue},{"url", erlang:list_to_binary(Url)}]}),
+      {doc, Feed} = blipdb:create({json, [{<<"source">>,SourceValue},{<<"url">>, erlang:list_to_binary(Url)}]}),
       {feed, Feed}
   end.
 %  LastUpdate = proplists:get_value(<<"last_update">>, Feed),
@@ -52,7 +52,7 @@ time_for_json(Time) ->
 
 
 update({feed, Feed}) ->
-  FreshFeed = json:set("last_update", current_time_for_json(), Feed),
+  FreshFeed = json:set(<<"last_update">>, current_time_for_json(), Feed),
   case blipdb:update({json, FreshFeed}) of
     {doc, Doc} ->
       {feed, Doc};
@@ -69,7 +69,6 @@ fetch_blips({feed, Feed}, Force) when is_boolean(Force), Force == true ->
   fetch_remote_blips({feed,Feed}).
 
 fetch_blips({feed, Feed}) ->
-  io:format("Fetching Blips for ~p~n",[Feed]),
   Id = json:get("_id",Feed),
   Url = json:get("url", Feed),
 
@@ -77,8 +76,7 @@ fetch_blips({feed, Feed}) ->
     true ->
       fetch_remote_blips({feed, Feed});
     false ->
-      io:format("Using Cached Feed~n",[]),
-      case blipdb:find_all(feed, "by_blips", [{startkey, [Id]}, {endkey, [Id, {}, {}]}]) of
+      case blipdb:find_all(feed, "by_blips", [{startkey, [Id]}, {endkey, [Id, {struct, []}, {struct, []}]}]) of
         none ->
           {error, [{<<"message">>, <<"Something Strange happened">>}]};
         [] -> 
@@ -86,7 +84,7 @@ fetch_blips({feed, Feed}) ->
         {error, _} ->
           {error, [{<<"message">>, <<"Feed not found">>}]};
         [{doc, LatestFeed}|Blips] ->
-          [{feed, LatestFeed}|Blips]
+          [{feed, LatestFeed}|[{blip, Blip} || {doc, Blip} <- Blips]]
 
       end
   end.
@@ -103,7 +101,9 @@ fetch_remote_blips({feed, Feed}) ->
     api ->
       store(parse(Body), Feed);
     web ->
-      store(parse_xml_feed(Body), Feed)
+      Ids = parse_ids_from_rss_feed(Body),
+      {ok, Response} = http_fetch(url_for(api, blip, [{"id", string:join(Ids,",")}])),
+      store(parse(Response), Feed)
   end,
   case feeds:update({feed, Feed}) of
     {feed, _Feed} ->
@@ -121,32 +121,24 @@ http_fetch(Url) ->
   end.
 
 parse(Content) ->
-  {ok, {obj, Json},_} = rfc4627:decode(Content),
-  {obj, Result} = json:get("result", Json),
-  {obj, Collection} = json:get("collection", Result),
+%  {ok, {struct, Json},_} = rfc4627:decode(Content),
+Json = json:decode(Content),
+  {struct, Result} = json:get("result", Json),
+  {struct, Collection} = json:get("collection", Result),
   Blips = json:get("Blip", Collection),
   Blips.
 
-parse_xml_feed(Content) ->
+parse_ids_from_rss_feed(Content) ->
   {"rss", _, [{"channel",[], Entries}]} = xml:parse_string(Content),
   %  io:format("Channel: ~p~n",[Entries]),
   %  NewEntries = [{Key, Value} || {Key, Value} <- Entries, Key == "item"],
   lists:foldl(
     fun({_Key, _Attrs, _Value}, Feed) when _Key == "item" -> 
-        Item =lists:foldl(
-          fun({Key, Attrs, [Value]}, Result) when Key == "pubDate" ->
-              case parse_atom_date(binary_to_list(Value)) of
-                {ok, Date} ->
-              json:set("insTime", time_for_json(Date), Result);
-                {error, Reason} ->
-                  throw({error, Reason})
-              end;
-            ({"link", Attrs, [Url]}, Result) -> 
-              io:format("With a URL, ~p~n", [Url]),
+        [Item] = lists:foldl(
+          fun({"link", Attrs, [Url]}, Result) ->
+%              io:format("With a URL, ~p~n", [Url]),
               {_,_,Path,_,_} = mochiweb_util:urlsplit(binary_to_list(Url)),
-              json:set("id",list_to_binary(get_blip_id(Path)), Result);
-            ({"title", Attrs, [Title]}, Result) -> 
-              json:set("title",Title, Result);
+              [get_blip_id(Path)|Result];
             ({Key, Attrs, Value}, Result) ->
               Result
 %              json:set(Key, Value, Result)
@@ -197,7 +189,6 @@ parse_atom_date(String) ->
 get_blip_id(Path) ->
   {ok, Rxp} = re:compile("^\/([^\/]+\/){3}([^\/]+)\/"),
   {match, [Blip|Rest]} = re:run(Path, Rxp,[{capture,[2],list}]),
-  io:format("Captures: ~p~n", [Blip]),
   Blip.
 
 store(Blips, Feed) ->
@@ -213,7 +204,7 @@ store(Blips, Feed) ->
   %  end.
   lists:map(fun (Blip) -> find_or_create(Blip, Feed) end, Blips).
 
-find_or_create({obj, Blip}, Feed) ->
+find_or_create({struct, Blip}, Feed) ->
   find_or_create(Blip, Feed);
 
 find_or_create(Blip, Feed) ->
@@ -222,7 +213,12 @@ find_or_create(Blip, Feed) ->
   case blips:read(Id) of
     {blip, NewBlip} ->
       BlipWithFeed = add_feed_to_blip(NewBlip, FeedId),
-      blipdb:update({json, BlipWithFeed});
+      case blipdb:update({json, BlipWithFeed}) of
+        {doc, UpdatedBlip} ->
+          {blip, UpdatedBlip};
+        {error, Reason} ->
+          {error, Reason}
+      end;
     {error, Reason} ->
       BlipWithFeed = add_feed_to_blip(Blip, FeedId),
       blips:create({struct, BlipWithFeed});
@@ -255,3 +251,89 @@ is_outdated({feed, _Feed} = Feed) ->
           false
       end
   end.
+
+fetch(Source, Section, Variable) ->
+  Url = url_for(Source, Section, Variable),
+  Feed = case feeds:read(Url) of
+    {feed, _Feed} -> 
+      {feed, _Feed};
+    {error, _} ->
+      feeds:create(Url, Source)
+  end,
+  case feeds:fetch_blips(Feed) of
+    [{feed, UpdatedFeed}|Blips] ->
+      [{feed, UpdatedFeed}|Blips];
+    Random ->
+      io:format("Result: ~p~n", [Random])
+  end.
+
+url_for(Source, Section, Variable) ->
+  case Source of
+    api ->
+      Path = case Section of
+        station ->
+          ["getUserProfile.json"];
+        blip ->
+          ["getById.json"];
+        _Section ->
+          [_Section]
+      end,
+      build_url({"http","api.blip.fm","/blip"}, Path, Variable);
+    web ->
+      {Path, Query} = case {Section,Variable} of
+        {radar, User} ->
+          {["feed", User], []};
+        {replies, User} ->
+          {["feed", User, "replies"], []};
+        {_Section, Var} ->
+          {[_Section, var], []}
+      end,
+      build_url({"http","blip.fm",""}, Path, Query)
+  end.
+
+api_root_url(Path, Query) ->
+  build_url({"http","api.blip.fm","/blip"}, Path, Query).
+
+build_url({Scheme, Host, Rootpath}, Path, Query) ->
+  mochiweb_util:urlunsplit({Scheme, Host, mochiweb_util:join(lists:append([Rootpath],Path),"/"),encode_query(Query),[]}).
+
+web_root_url(Path, Query) ->
+  build_url({"http","blip.fm",""}, Path, Query).
+
+blip_url(Query) ->
+  api_root_url(["getById.json"], Query).
+
+station_url(Query) ->
+  api_root_url(["getUserProfile.json"], Query). 
+
+radar_url(User) ->
+  web_root_url(["feed",User],[]).
+
+replies_url(User) ->
+  web_root_url(["feed",User,"replies"],[]).
+
+encode_query(Query) ->
+  mochiweb_util:urlencode(Query).
+
+
+%fetch(api, blip, Query) ->
+%  fetch(api, blip_url(Query));
+%
+%fetch(api, Feed, Query) ->
+%  fetch(api, api_root_url(Feed,Query));
+%
+%fetch(api, Url) ->
+%  fetch(
+%
+%    fetch(web, radar, User) ->
+%      fetch(web, radar_url(User));
+%
+%    fetch(web, replies, User) ->
+%      fetch(web, replies_url(User));
+%
+%    fetch(web, Feed, User) ->
+%      fetch(web_root_url(Feed, User), web). 
+%
+%
+%
+%    fetch(Source, Url) ->

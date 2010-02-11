@@ -4,28 +4,33 @@
 -include_lib("stdlib/include/qlc.hrl").
 
 -include("records.hrl").
+-define(DATABASE, "blipfm").
 
 reset() ->
-  erlang_couchdb:delete_database(host(), database()),
-  erlang_couchdb:create_database(host(), database()),
+  ecouch:db_delete(?DATABASE),
+  ecouch:db_create(?DATABASE),
+
   create_view("Blip", [
-      {<<"all">>, ["function(doc) { if (doc['id'] && doc['title'])  emit(doc._id, doc) }"]},
-      {<<"by_title">>, 
-["function(doc) {
-  if (doc['id'] && doc['title']) {
-    emit(doc.title,doc);
-  }
-}"]},
-      {<<"by_blip_id">>, ["function(doc) { if (doc['id'] && doc['title'])  emit(doc.id, doc) }"]}]),
-  create_view("Feed", [{<<"all">>, ["function(doc) { if (doc['url'] && doc['last_update'])  emit(doc._id, doc) }"]}, {<<"by_url">>, ["function(doc) { if (doc['url'] && doc['last_update'])  emit(doc.url, doc) }"]},
-      {<<"by_blips">>, ["function(doc) { if (doc['url'] && doc['last_update'])  emit([doc._id,1], doc); if (doc['id'] && doc['title'] && doc['feeds']) { for(var k = 0; k < doc['feeds'].length; k++) { emit([doc.feeds[k],2,doc['insTime']],doc); } }}"]}]).
+      {"all",
+        "function(doc) { if (doc['id'] && doc['title'])  emit(doc._id, doc) }"},
+      {"by_title", "function(doc) {if (doc['id'] && doc['title']) { emit(doc.title,doc); } }"},
+      {"by_blip_id", "function(doc) { if (doc['id'] && doc['title'])  emit(doc.id, doc) }"}
+    ]),
+  create_view("Feed", [
+      {"all",
+        "function(doc) { if (doc['url'] && doc['last_update'])  emit(doc._id, doc) }"},
+      {"by_url", 
+        "function(doc) { if (doc['url'] && doc['last_update'])  emit(doc.url, doc) }"},
+      {"by_blips",
+        "function(doc) { if (doc['url'] && doc['last_update'])  emit([doc._id,1], doc); if (doc['id'] && doc['title'] && doc['feeds']) { for(var k = 0; k < doc['feeds'].length; k++) { emit([doc.feeds[k],2,doc['insTime']],doc); } }}"}
+    ]).
 
 all(Design) ->
   find_all(Design, "all", []).
 
 find(Design, View, Q) ->
   case fetch_all(Design, View, Q) of 
-    [{obj, _Result} = Result] -> 
+    [{struct, _Result} = Result] -> 
       %io:format("Single Result: ~p~n",[Result]),
       extract_document(Result);
     [Result|_] ->
@@ -58,7 +63,7 @@ fetch_all(Design, View, Options) ->
     [], Options),
   DesignName  = record_to_design_name(Design),
   case ecouch:view_access(database(), DesignName, View, NewOptions) of 
-    {ok, {obj, Response}} ->
+    {ok, {struct, Response}} ->
       case extract_rows(Response) of
         {Rows, _, _} -> 
           %io:format("Rows: ~p~n",[Rows]),
@@ -72,17 +77,16 @@ fetch_all(Design, View, Options) ->
 
 create({bulk, List}) ->
   case ecouch:doc_bulk_create(database(), List) of
-    {ok, {obj, DocList}} ->
+    {ok, {struct, DocList}} ->
       io:format("Response for Bulkcreation ~p~n", [DocList]);
-%      [{doc, update_id_and_revision(Doc)} || {obj, Doc} <- DocList];
+%      [{doc, update_id_and_revision(Doc)} || {struct, Doc} <- DocList];
     {error, Reason} ->
       {error, {<<"message">>, io_lib:format("Error: ~p~n",[Reason])}}
   end;
 
 create({json, Doc}) ->
-  case ecouch:doc_create(database(),{obj, Doc}) of
-    %  case erlang_couchdb:create_document(host(), database(), Doc) of
-    {ok, {obj, Rest}} ->
+  case ecouch:doc_create(database(),{struct, Doc}) of
+    {ok, {struct, Rest}} ->
       %Rev = json:get("rev",Rest),
 
       UpdatedDoc = update_id_and_revision(Rest, Doc),
@@ -97,14 +101,12 @@ read(Oid) ->
   ecouch:doc_get(database(), Oid).
 
 update({json, Doc}) ->
-  io:format("Document before Update ~p~n", [Doc]),
-  case proplists:lookup("_id",Doc) of
+  case json:get("_id",Doc) of
     none ->
       {error, {<<"message">>,"Missing Document _id"}};
-    {"_id", UUID} ->
-      case ecouch:doc_update(database(), UUID, {obj, Doc}) of
-        %      case erlang_couchdb:update_document(host(), database(), erlang:binary_to_list(UUID), Doc) of
-        {ok, {obj, Rest}} ->
+    UUID ->
+      case ecouch:doc_update(database(), UUID, {struct, Doc}) of
+        {ok, {struct, Rest}} ->
           Rev = json:get("rev",{struct, Rest}),
           UpdatedDoc = json:set("_rev",Rev,Doc),
           {doc, UpdatedDoc};
@@ -119,19 +121,18 @@ delete({json, Doc}) ->
       {error, {<<"message">>,"Missing Document _id"}};
     UUID ->
       ecouch:doc_delete(database(), UUID)
-      %      erlang_couchdb:delete_document(host(), database(), UUID)
   end.
 
 % Internal Methods
 
 
 
-extract_document({obj, Result}) ->
-  {obj, Doc} = json:get("value",Result),
+extract_document({struct, Result}) ->
+  {struct, Doc} = json:get("value",Result),
   {doc, Doc}.
 
 extract_rows(Response) -> 
-  [{"total_rows", Count}, {"offset", Offset}, {"rows",Rows}] = Response,
+  [{<<"total_rows">>, Count}, {<<"offset">>, Offset}, {<<"rows">>,Rows}] = Response,
   {Rows, Count, Offset}.
 
 
@@ -150,13 +151,17 @@ host() ->
 database() ->
   "blipfm".
 
-create_view(Design, Code) ->
-  case erlang_couchdb:create_view(host(), database(), Design, <<"javascript">>, Code) of
-    {json, {struct, [{<<"error">>,Error},{<<"reason">>,Reason}]}} -> 
-      {error, {Error, Reason}};
-    {json, Result} ->
-      {json, Result}
-  end.
+create_view(Design, Maps) ->
+  PreparedMaps = [{list_to_binary(Key), 
+      {struct, 
+        [
+          {<<"map">>, 
+            list_to_binary(Code)}
+        ]
+      }
+    } || {Key, Code} <- Maps],
+  ecouch:view_create(?DATABASE,Design, {struct, PreparedMaps}).
+
 
 
 update_id_and_revision(Response, Doc) ->

@@ -24,7 +24,7 @@ respond(Req, Data) ->
   Req:ok({"application/json", [{"Server","eqlizr"}], [json:encode(Data)]}).
 
 respond_error(Req, Message) ->
-  Req:ok({"application/json", [{"Server", "eqlizr"}], [json:encode({obj, [{"error", Message}]})]}).
+  Req:ok({"application/json", [{"Server", "eqlizr"}], [json:encode({struct, [{"error", Message}]})]}).
   
 
 loop(Req, DocRoot) ->
@@ -35,16 +35,16 @@ loop(Req, DocRoot) ->
                 "blip/timeline" ++ Id ->
                   case blipService:fetch_radar(Id) of
                     [{feed, Feed}|Blips] ->
-                      RawBlips = [{obj, X} || {_, X} <- Blips],
-                      respond(Req, [{obj, Feed}|RawBlips]);
+                      RawBlips = [{struct, X} || {_, X} <- Blips],
+                      respond(Req, [{struct, Feed}|RawBlips]);
                     _ ->
                       respond_error(Req, <<"not_found">>)
                     end;
                 "blip/" ++ Id ->
                   case blipService:fetch_station(Id) of
                     [{feed, Feed}|Blips] ->
-                      RawBlips = [{obj, X} || {_, X} <- Blips],
-                      respond(Req, [{obj, Feed}|RawBlips]);
+                      RawBlips = [{struct, X} || {_, X} <- Blips],
+                      respond(Req, [{struct, Feed}|RawBlips]);
                     _ ->
                       respond_error(Req, <<"not_found">>)
                     end;
