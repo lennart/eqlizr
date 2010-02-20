@@ -32,8 +32,8 @@ loop(Req, DocRoot) ->
     case Req:get(method) of
         Method when Method =:= 'GET'; Method =:= 'HEAD' ->
             case Path of
-                "blip/timeline" ++ Id ->
-                  case blipService:fetch_radar(Id) of
+                "blip/full/" ++ Id ->
+                  case blipService:fetch_full_station(Id) of
                     [{feed, Feed}|Blips] ->
                       RawBlips = [{struct, X} || {_, X} <- Blips],
                       respond(Req, [{struct, Feed}|RawBlips]);

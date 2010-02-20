@@ -4,8 +4,8 @@
 fetch_station(User) ->
   feeds:fetch(api, station, [{"username",User}]).
 
-fetch_radar(User) ->
-  feeds:fetch(web, radar, User).
+fetch_full_station(User) ->
+  feeds:fetch(api, full_station, [{"username",User}]).
 
 full_update() ->
   feed_synchronizer ! update.

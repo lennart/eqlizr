@@ -23,6 +23,8 @@ start() ->
     ensure_started(inets),
     ensure_started(ecouch),
     ensure_started(erlsom),
+    ensure_started(esolr),
+    %esolr:start_link(),
     application:start(eqlizr).
    % register(feed_synchronizer, spawn(blipService,update_all_feeds,[60])).
 
@@ -35,4 +37,5 @@ stop() ->
     feed_synchronizer ! finished,
     application:stop(erlsom),
     application:stop(inets),
+    application:stop(esolr),
     Res.

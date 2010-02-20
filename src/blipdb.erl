@@ -6,6 +6,8 @@
 -define(DATABASE, "blipfm").
 
 reset() ->
+  esolr:delete({q, "*:*"}),
+  esolr:optimize(),
   ecouch:db_delete(?DATABASE),
   ecouch:db_create(?DATABASE),
 

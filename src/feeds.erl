@@ -78,6 +78,11 @@ fetch_blips({feed, Feed}) ->
       end
   end.
 
+parse_remote_api_blips(Url) ->
+  {ok, Body} = http_fetch(Url),
+  RawBlips = parse(Body),
+  RawBlips.
+
 fetch_remote_blips({feed, Feed}) ->
   Url = json:get("url", Feed),
   Source = json:get("source", Feed),
@@ -93,6 +98,7 @@ fetch_remote_blips({feed, Feed}) ->
   end,
   case feeds:update({feed, Feed}) of
     {feed, _Feed} ->
+      esolr:commit(),
       [{feed, _Feed}|Blips];
     {error, Reason} ->
       {error, Reason}
@@ -161,12 +167,20 @@ find_or_create(Blip, Feed) ->
       io:write("Failed\n")
   end.
 
+
+get_feed(Url,Source) ->
+  case feeds:read(Url) of
+    {feed, _Feed} -> 
+      {feed, _Feed};
+    {error, _} ->
+      feeds:create(Url, Source)
+  end.
+
 add_feed_to_blip(Blip, FeedId) ->
   case json:get("feeds", Blip) of
     none ->
       Feeds = [FeedId];
     CurrentFeeds ->
-      io:format("Current Feeds: ~p~nFeed ID: ~p~n",[FeedId,CurrentFeeds]),
       Feeds = sets:to_list(sets:from_list([FeedId|CurrentFeeds]))
   end,
   json:set("feeds",Feeds,Blip).
@@ -187,20 +201,49 @@ is_outdated({feed, _Feed}) ->
       end
   end.
 
+
 fetch(Source, Section, Variable) ->
-  Url = url_for(Source, Section, Variable),
-  Feed = case feeds:read(Url) of
-    {feed, _Feed} -> 
-      {feed, _Feed};
-    {error, _} ->
-      feeds:create(Url, Source)
-  end,
-  case feeds:fetch_blips(Feed) of
-    [{feed, UpdatedFeed}|Blips] ->
-      [{feed, UpdatedFeed}|Blips];
-    Random ->
-      io:format("Result: ~p~n", [Random])
+  case [Source, Section] of
+    [api, full_station] ->
+      {feed, Feed} = get_feed(url_for(api, station, Variable),api),
+      Station = full_station(Variable),
+      Blips = store(Station, Feed),
+      case feeds:update({feed, Feed}) of
+        {feed, _Feed} ->
+          esolr:commit(),
+          [{feed, _Feed}|Blips];
+        {error, Reason} ->
+          {error, Reason}
+      end;
+    _ ->
+      url_for(Source, Section, Variable),
+      {feed, Feed} = get_feed(url_for(Source, Section, Variable), Source),
+      case feeds:fetch_blips({feed, Feed}) of
+        [{feed, UpdatedFeed}|Blips] ->
+          [{feed, UpdatedFeed}|Blips];
+        Random ->
+          io:format("Result: ~p~n", [Random])
+      end
   end.
+
+full_station([{"username", Username}]) ->
+  UpdatedParams = [{"username", Username}, {"offset", 0}],
+  Blips = parse_remote_api_blips(url_for(api, station, UpdatedParams)),
+  full_station(UpdatedParams, Blips).
+
+full_station([{"username", Username},{"offset", Offset}], Acc) ->
+  UpdatedParams = [{"username", Username}, {"offset", Offset+25}],
+  case parse_remote_api_blips(url_for(api, station, UpdatedParams)) of
+    {struct, []} ->
+      Acc;
+    Blips ->
+      %io:format("Received Blips ~p~n", [Blips]),
+      full_station(UpdatedParams, lists:flatten([Acc|Blips]))
+  end.
+
+
+
+%full_station(Variable, 
 
 url_for(Source, Section, Variable) ->
   case Source of
@@ -213,6 +256,7 @@ url_for(Source, Section, Variable) ->
         _Section ->
           [_Section]
       end,
+      io:format("Generating with query: ~p~n", [Variable]),
       build_url({"http","api.blip.fm","/blip"}, Path, Variable);
     web ->
       {Path, Query} = case {Section,Variable} of
