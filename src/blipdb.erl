@@ -1,5 +1,5 @@
 -module(blipdb).
--export([reset/0,find/3,find_all/3,all/1,update/1,read/1,create/1,delete/1]).
+-export([reset/0,find/3,find_all/3,all/1,update/1,read/1,create/1,delete/1,clear_index/0]).
 
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -157,3 +157,6 @@ create_view(Design, Maps) ->
 
 update_id_and_revision(Response, Doc) ->
   json:set("_id",json:get("id",Response),json:set("_rev",json:get("rev",Response),Doc)).
+
+clear_index() ->
+  esolr:delete({q, "*:*"}).
