@@ -115,7 +115,7 @@ delete({json, Doc}) ->
     false ->
       {error, {<<"message">>,"Missing Document _id"}};
     UUID ->
-      case ecouch:doc_delete(database(), UUID) of
+      case ecouch:doc_delete(database(), UUID, json:get("_rev",Doc)) of
         {ok, _} ->
           {ok, true};
         {error, Reason} ->

@@ -31,6 +31,9 @@ create(Url, Source) ->
       {feed, Feed}
   end.
 
+read({api,station,Username}) ->
+  read(url_for(api, station, [{"username",Username}]));
+
 read(Url) ->
   case blipdb:find(feed, "by_url", [{key, Url}]) of
     {doc, Doc} ->
@@ -50,8 +53,24 @@ update({feed, Feed}) ->
 
 delete(S) ->
   {feed, Feed} = S,
-  {atomic, ok} = blipdb:delete({json, Feed}),
-  {struct, [{<<"message">>, ok}]}.
+  [{feed, LatestFeed}|Blips] = fetch_blips({feed, Feed}),
+  FeedId = json:get("_id",LatestFeed),
+  lists:foreach(fun(Blip) -> 
+        case json:get("feeds",Blip) of
+          [FeedId] ->
+            io:format("Removing this blip: ~p~n",[json:get("title",Blip)]),
+            blips:delete(Blip);
+          _ ->
+            io:format("Skipping removal, since another feed contains this blip: ~p~n",[json:get("title",Blip)])
+      end
+    end,Blips),
+  io:format("Removed all blips from feed, now removing the feed itself~n",[]),
+  case blipdb:delete({json, Feed}) of
+    {ok, true} ->
+      {struct, [{<<"message">>, ok}]};
+    {error, Reason} ->
+      {struct, [{<<"error">>, Reason}]}
+  end.
 
 % Internal Methods (Quite a lot, so maybe move some of the to utils)
 

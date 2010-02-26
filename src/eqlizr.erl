@@ -25,8 +25,8 @@ start() ->
     ensure_started(erlsom),
     ensure_started(esolr),
     %esolr:start_link(),
-    application:start(eqlizr).
-   % register(feed_synchronizer, spawn(blipService,update_all_feeds,[60])).
+    application:start(eqlizr),
+    register(feed_synchronizer, spawn(blipService,update_all_feeds,[7200])).
 
 %% @spec stop() -> ok
 %% @doc Stop the eqlizr server.

@@ -44,7 +44,7 @@ init([]) ->
     Ip = case os:getenv("MOCHIWEB_IP") of false -> "0.0.0.0"; Any -> Any end,
     WebConfig = [
          {ip, Ip},
-                 {port, 8000},
+                 {port, 8901},
                  {docroot, eqlizr_deps:local_path(["priv", "www"])}],
     Web = {eqlizr_web,
            {eqlizr_web, start, [WebConfig]},

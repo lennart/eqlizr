@@ -62,6 +62,20 @@ loop(Req, DocRoot) ->
                 _ ->
                     Req:not_found()
             end;
+        'DELETE' ->
+            case Path of
+              "blip/" ++ Id ->
+                case feeds:read({api, station, Id}) of
+                  {feed, Feed} ->
+                    feeds:delete({feed, Feed}),
+                    respond(Req, {struct, [{ok, true}]});
+                  _ ->
+                    respond_error(Req, <<"not_found">>)
+                end;
+              _ ->
+                Req:not_found()
+            end;
+
         _ ->
             Req:respond({501, [], []})
     end.
