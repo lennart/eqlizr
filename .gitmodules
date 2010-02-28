@@ -1,0 +1,15 @@
+[submodule "erlsom"]
+	path = erlsom
+	url = git://github.com/lennart/erlsom.git
+[submodule "deps/mochixpath"]
+	path = deps/mochixpath
+	url = git://github.com/JacobVorreuter/mochixpath.git
+[submodule "deps/mochiweb"]
+	path = deps/mochiweb
+	url = git://github.com/ngerakines/mochiweb.git
+[submodule "src/uri"]
+	path = src/uri
+	url = git://gist.github.com/317859.git
+[submodule "deps/esolr"]
+	path = deps/esolr
+	url = git://github.com/lennart/esolr.git

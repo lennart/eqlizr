@@ -2,7 +2,6 @@
 *.swo
 *.swp
 Mnesia*
-deps/*
 ebin/*
 erl_crash.dump
 tags
