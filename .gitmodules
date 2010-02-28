@@ -1,6 +1,3 @@
-[submodule "erlsom"]
-	path = erlsom
-	url = git://github.com/lennart/erlsom.git
 [submodule "deps/mochixpath"]
 	path = deps/mochixpath
 	url = git://github.com/JacobVorreuter/mochixpath.git
@@ -13,3 +10,9 @@
 [submodule "deps/esolr"]
 	path = deps/esolr
 	url = git://github.com/lennart/esolr.git
+[submodule "deps/ecouch"]
+	path = deps/ecouch
+	url = git://github.com/lennart/ecouch
+[submodule "deps/erlsom"]
+	path = deps/erlsom
+	url = git://github.com/lennart/erlsom
