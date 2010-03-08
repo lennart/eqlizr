@@ -15,14 +15,14 @@ update_all_feeds(Interval) when is_integer(Interval) ->
   spawn_link(?MODULE,update_all_feeds,[self(),Interval]),
   receive
     {'EXIT',_From,Reason} ->
-      io:format("Feed Synchronizer Crashed, restarting it"),
+      io:format("Feed Synchronizer Crashed ~p, restarting it~n", [Reason]),
       update_all_feeds(Interval);
     {error, Reason} ->
-      io:format("Error: ~p~nRestarting Feed Synchronizer~n", [Reason]);
+      io:format("Error: ~p~nRestarting Feed Synchronizer~n", [Reason]),
       update_all_feeds(Interval);
     done ->
       io:format("Ending Work of the Feed Synchronizer")
-  end;
+  end.
 
 update_all_feeds(Pid, Interval) ->
   case feeds:read_all() of
