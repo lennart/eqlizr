@@ -1,8 +1,12 @@
+__Sorry, but this is old, unmaintained and hopefully obsolete soonish!__
+
 eqlizr
 ======
 makes hierarchies flat.  
 A simple mochiweb-server storing blip.fm feeds (RSS and public API Endpoints) into couchdb.  
 This does **not** download any music, it's _just_ a metadata store.  
+
+
 
 Motivation
 ----------
